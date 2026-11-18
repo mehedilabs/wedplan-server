@@ -4,6 +4,46 @@ import { servicesCollection } from "../utils/collections";
 
 const router = Router();
 
+import multer from "multer";
+import { uploadImage } from "../utils/imageUpload";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+});
+
+// Upload service image
+router.post("/upload-image", upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).send({
+        success: false,
+        message: "Please select an image",
+      });
+      return;
+    }
+
+    const imageUrl = await uploadImage(req.file);
+
+    res.status(200).send({
+      success: true,
+      message: "Image uploaded successfully",
+      data: {
+        url: imageUrl,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to upload image:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to upload image",
+    });
+  }
+});
+
 // Get all approved and active services
 router.get("/", async (req, res) => {
   try {
