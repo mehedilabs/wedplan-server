@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
+import serviceRoutes from "./routes/serviceRoutes";
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Connect MongoDB before handling requests
+// MongoDB connection middleware
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -21,6 +22,9 @@ app.use(async (req, res, next) => {
     res.status(500).send("Database connection failed");
   }
 });
+
+// Services routes
+app.use("/services", serviceRoutes);
 
 app.get("/", (req, res) => {
   res.send("WedPlan Server is running!");
