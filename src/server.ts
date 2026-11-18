@@ -2,7 +2,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
+import { connectDB } from "./config/db";
 
 dotenv.config();
 
@@ -11,29 +11,28 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
-
-const uri = process.env.MONGODB_URI as string;
-const client = new MongoClient(uri);
-
-const connectDB = async () => {
+// Connect MongoDB before handling requests
+app.use(async (req, res, next) => {
   try {
-    await client.connect();
-
-    const db = client.db(process.env.DB_NAME);
-
-    console.log("MongoDB connected successfully!");
-
-    app.get("/", (req, res) => {
-      res.send("WedPlan Server is running!");
-    });
-
-    app.listen(PORT, () => {
-      console.log(`WedPlan server is running on port ${PORT}`);
-    });
+    await connectDB();
+    next();
   } catch (error) {
     console.log("MongoDB connection failed:", error);
+    res.status(500).send("Database connection failed");
   }
-};
+});
 
-connectDB();
+app.get("/", (req, res) => {
+  res.send("WedPlan Server is running!");
+});
+
+// Local development server
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000;
+
+  app.listen(PORT, () => {
+    console.log(`WedPlan server is running on port ${PORT}`);
+  });
+}
+
+export default app;
