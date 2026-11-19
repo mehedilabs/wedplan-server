@@ -5,6 +5,56 @@ import { bookingsCollection, servicesCollection } from "../utils/collections";
 
 const router = Router();
 
+// Check whether the customer already has an active booking for this service
+router.get("/status", async (req, res) => {
+  try {
+    const serviceId = req.query.serviceId;
+    const customerId = req.query.customerId;
+
+    if (
+      typeof serviceId !== "string" ||
+      typeof customerId !== "string" ||
+      !serviceId.trim() ||
+      !customerId.trim()
+    ) {
+      res.status(400).send({
+        success: false,
+        message: "Service ID and customer ID are required",
+      });
+      return;
+    }
+
+    if (!ObjectId.isValid(serviceId)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service ID",
+      });
+      return;
+    }
+
+    const existingBooking = await bookingsCollection().findOne({
+      serviceId,
+      customerId: customerId.trim(),
+      status: { $nin: ["rejected", "cancelled"] },
+    });
+
+    res.status(200).send({
+      success: true,
+      message: "Booking status checked successfully",
+      data: {
+        hasActiveBooking: Boolean(existingBooking),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to check booking status:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to check booking status",
+    });
+  }
+});
+
 // Create a booking request
 router.post("/", async (req, res) => {
   try {
@@ -52,6 +102,8 @@ router.post("/", async (req, res) => {
       return;
     }
 
+    const normalizedCustomerId = customerId.trim();
+
     // Validate service ID
     if (!ObjectId.isValid(serviceId)) {
       res.status(400).send({
@@ -84,7 +136,7 @@ router.post("/", async (req, res) => {
     }
 
     // Prevent vendors from booking their own services
-    if (service.vendorId === customerId) {
+    if (service.vendorId === normalizedCustomerId) {
       res.status(403).send({
         success: false,
         message: "You cannot book your own service",
@@ -104,18 +156,18 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    // Check for duplicate booking on the same date
+    // Prevent multiple active bookings for the same service
     const existingBooking = await bookingsCollection().findOne({
       serviceId,
-      customerId,
-      eventDate,
-      status: { $ne: "cancelled" },
+      customerId: normalizedCustomerId,
+      status: { $nin: ["rejected", "cancelled"] },
     });
 
     if (existingBooking) {
       res.status(409).send({
         success: false,
-        message: "You have already requested this service for this date",
+        message:
+          "You already have an active booking request for this service. You can book again after it is rejected or cancelled.",
       });
       return;
     }
@@ -125,7 +177,7 @@ router.post("/", async (req, res) => {
       serviceId,
       serviceName: service.serviceName,
       vendorId: service.vendorId,
-      customerId: customerId.trim(),
+      customerId: normalizedCustomerId,
       customerName: customerName.trim(),
       customerEmail: customerEmail.trim(),
       eventDate,
