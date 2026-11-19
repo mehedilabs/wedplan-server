@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
 import serviceRoutes from "./routes/serviceRoutes";
+import bookingRoutes from "./routes/bookingRoutes";
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use(async (req, res, next) => {
 
 // Services routes
 app.use("/services", serviceRoutes);
+
+// Booking routes
+app.use("/bookings", bookingRoutes);
 
 app.get("/", (req, res) => {
   res.send("WedPlan Server is running!");
