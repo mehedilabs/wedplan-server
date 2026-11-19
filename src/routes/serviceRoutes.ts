@@ -109,14 +109,16 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
-      vendorId,
-      serviceName,
-      category,
-      description,
-      price,
-      location,
-      images,
-    } = req.body;
+  vendorId,
+  vendorName,
+  vendorEmail,
+  serviceName,
+  category,
+  description,
+  price,
+  location,
+  images,
+} = req.body;
 
     const allowedCategories = [
       "Photography & Videography",
@@ -127,24 +129,27 @@ router.post("/", async (req, res) => {
       "Wedding Fashion",
     ];
 
+ if (
+  !vendorId ||
+  !vendorName ||
+  !vendorEmail ||
+  !serviceName ||
+  !category ||
+  !description ||
+  price === undefined ||
+  !location ||
+  !Array.isArray(images) ||
+  images.length === 0
+) {
+  res.status(400).send({
+    success: false,
+    message: "Please provide all required service information",
+  });
+  return;
+}
     if (
-      !vendorId ||
-      !serviceName ||
-      !category ||
-      !description ||
-      price === undefined ||
-      !location ||
-      !Array.isArray(images) ||
-      images.length === 0
-    ) {
-      res.status(400).send({
-        success: false,
-        message: "Please provide all required service information",
-      });
-      return;
-    }
-
-    if (
+      typeof vendorName !== "string" ||
+      typeof vendorEmail !== "string" ||
       typeof vendorId !== "string" ||
       typeof serviceName !== "string" ||
       typeof category !== "string" ||
@@ -187,18 +192,20 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const newService = {
-      vendorId: vendorId.trim(),
-      serviceName: serviceName.trim(),
-      category,
-      description: description.trim(),
-      price,
-      location: location.trim(),
-      images,
-      status: "pending" as const,
-      isActive: true,
-      createdAt: new Date(),
-    };
+   const newService = {
+  vendorId: vendorId.trim(),
+  vendorName: vendorName.trim(),
+  vendorEmail: vendorEmail.trim(),
+  serviceName: serviceName.trim(),
+  category,
+  description: description.trim(),
+  price,
+  location: location.trim(),
+  images,
+  status: "pending" as const,
+  isActive: true,
+  createdAt: new Date(),
+};
 
     const result = await servicesCollection().insertOne(newService);
 
