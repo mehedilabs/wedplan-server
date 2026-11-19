@@ -44,6 +44,42 @@ router.post("/upload-image", upload.single("image"), async (req, res) => {
   }
 });
 
+// Get services by vendor ID
+router.get("/vendor/:vendorId", async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+
+    if (!vendorId || !vendorId.trim()) {
+      res.status(400).send({
+        success: false,
+        message: "Vendor ID is required",
+      });
+      return;
+    }
+
+    const services = await servicesCollection()
+      .find({
+        vendorId: vendorId.trim(),
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).send({
+      success: true,
+      message: "Vendor services fetched successfully",
+      data: services,
+    });
+  } catch (error) {
+    console.error("Failed to fetch vendor services:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch vendor services",
+    });
+  }
+});
+
+
 // Get all approved and active services
 router.get("/", async (req, res) => {
   try {
