@@ -107,6 +107,90 @@ router.get("/status", async (req, res) => {
   }
 });
 
+// Cancel a customer's pending booking
+router.patch("/:bookingId/cancel", async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { customerId } = req.body;
+
+    // Validate required fields
+    if (!bookingId || !customerId) {
+      res.status(400).send({
+        success: false,
+        message: "Booking ID and customer ID are required",
+      });
+      return;
+    }
+
+    // Validate customer ID type
+    if (typeof customerId !== "string" || !customerId.trim()) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid customer ID",
+      });
+      return;
+    }
+
+    // Validate booking ID
+    if (!ObjectId.isValid(bookingId)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid booking ID",
+      });
+      return;
+    }
+
+    // Find the customer's booking
+    const booking = await bookingsCollection().findOne({
+      _id: new ObjectId(bookingId),
+      customerId: customerId.trim(),
+    });
+
+    if (!booking) {
+      res.status(404).send({
+        success: false,
+        message: "Booking not found",
+      });
+      return;
+    }
+
+    // Only pending bookings can be cancelled
+    if (booking.status !== "pending") {
+      res.status(400).send({
+        success: false,
+        message: "Only pending bookings can be cancelled",
+      });
+      return;
+    }
+
+    // Update booking status
+    await bookingsCollection().updateOne(
+      {
+        _id: new ObjectId(bookingId),
+        customerId: customerId.trim(),
+        status: "pending",
+      },
+      {
+        $set: {
+          status: "cancelled",
+        },
+      },
+    );
+
+    res.status(200).send({
+      success: true,
+      message: "Booking cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Failed to cancel booking:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to cancel booking",
+    });
+  }
+});
+
 // Create a booking request
 router.post("/", async (req, res) => {
   try {
