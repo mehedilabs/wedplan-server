@@ -5,7 +5,6 @@ import { bookingsCollection, servicesCollection } from "../utils/collections";
 
 const router = Router();
 
-
 // Get all bookings submitted by a customer
 router.get("/customer/:customerId", async (req, res) => {
   try {
@@ -55,7 +54,6 @@ router.get("/customer/:customerId", async (req, res) => {
     });
   }
 });
-
 
 // Check whether the customer already has an active booking for this service
 router.get("/status", async (req, res) => {
@@ -163,19 +161,20 @@ router.patch("/:bookingId/cancel", async (req, res) => {
       return;
     }
 
-    // Update booking status
-    await bookingsCollection().updateOne(
-      {
-        _id: new ObjectId(bookingId),
-        customerId: customerId.trim(),
-        status: "pending",
-      },
-      {
-        $set: {
-          status: "cancelled",
-        },
-      },
-    );
+    // Permanently delete the pending booking
+    const result = await bookingsCollection().deleteOne({
+      _id: new ObjectId(bookingId),
+      customerId: customerId.trim(),
+      status: "pending",
+    });
+
+    if (result.deletedCount === 0) {
+      res.status(400).send({
+        success: false,
+        message: "Unable to cancel this booking",
+      });
+      return;
+    }
 
     res.status(200).send({
       success: true,
