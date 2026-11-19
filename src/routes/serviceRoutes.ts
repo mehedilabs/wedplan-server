@@ -1,6 +1,7 @@
 
 import { Router } from "express";
 import { servicesCollection } from "../utils/collections";
+import { ObjectId } from "mongodb";
 
 const router = Router();
 
@@ -40,6 +41,47 @@ router.post("/upload-image", upload.single("image"), async (req, res) => {
     res.status(500).send({
       success: false,
       message: "Failed to upload image",
+    });
+  }
+});
+
+// Get a single service by ID
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate MongoDB ObjectId
+    if (!ObjectId.isValid(id)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service ID",
+      });
+      return;
+    }
+
+    const service = await servicesCollection().findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!service) {
+      res.status(404).send({
+        success: false,
+        message: "Service not found",
+      });
+      return;
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Service details fetched successfully",
+      data: service,
+    });
+  } catch (error) {
+    console.error("Failed to fetch service details:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch service details",
     });
   }
 });
