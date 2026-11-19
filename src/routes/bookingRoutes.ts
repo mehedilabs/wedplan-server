@@ -5,6 +5,58 @@ import { bookingsCollection, servicesCollection } from "../utils/collections";
 
 const router = Router();
 
+
+// Get all bookings submitted by a customer
+router.get("/customer/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId.trim()) {
+      res.status(400).send({
+        success: false,
+        message: "Customer ID is required",
+      });
+      return;
+    }
+
+    const bookings = await bookingsCollection()
+      .find({ customerId: customerId.trim() })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const bookingsWithServiceDetails = await Promise.all(
+      bookings.map(async (booking) => {
+        const service = ObjectId.isValid(booking.serviceId)
+          ? await servicesCollection().findOne({
+              _id: new ObjectId(booking.serviceId),
+            })
+          : null;
+
+        return {
+          ...booking,
+          vendorName: service?.vendorName ?? "Vendor",
+          price: service?.price ?? null,
+          image: service?.images?.[0] ?? null,
+        };
+      }),
+    );
+
+    res.status(200).send({
+      success: true,
+      message: "Customer bookings fetched successfully",
+      data: bookingsWithServiceDetails,
+    });
+  } catch (error) {
+    console.error("Failed to fetch customer bookings:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch customer bookings",
+    });
+  }
+});
+
+
 // Check whether the customer already has an active booking for this service
 router.get("/status", async (req, res) => {
   try {
