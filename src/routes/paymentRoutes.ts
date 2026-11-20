@@ -8,7 +8,10 @@ import {
 } from "mongodb";
 import { getStripe } from "../config/stripe";
 import { verifyVendor } from "../utils/verifyVendor";
-import { usersCollection } from "../utils/collections";
+import {
+  usersCollection,
+  transactionsCollection,
+} from "../utils/collections";
 
 const router = Router();
 
@@ -82,7 +85,6 @@ router.post(
 
     let event: Stripe.Event;
 
-    // Verify Stripe webhook signature
     try {
       const stripe = getStripe();
 
@@ -127,9 +129,7 @@ router.post(
                 { id: userId },
               ],
             }
-          : {
-              id: userId,
-            };
+          : { id: userId };
 
         // Activate lifetime Premium
         const result = await usersCollection().updateOne(userFilter, {
@@ -150,6 +150,31 @@ router.post(
         }
 
         console.log("Vendor Premium activated successfully:", userId);
+
+        // Save transaction without creating duplicates
+        const transaction = {
+          vendorId: userId,
+          plan: "premium" as const,
+          amount: (session.amount_total ?? 0) / 100,
+          currency: session.currency ?? "usd",
+          stripeSessionId: session.id,
+          stripeSubscriptionId: null,
+          status: "paid" as const,
+          createdAt: new Date(session.created * 1000),
+        };
+
+        await transactionsCollection().updateOne(
+          { stripeSessionId: session.id },
+          {
+            $setOnInsert: transaction,
+          },
+          { upsert: true },
+        );
+
+        console.log(
+          "Transaction saved successfully:",
+          session.id,
+        );
       }
 
       res.status(200).send({ received: true });
