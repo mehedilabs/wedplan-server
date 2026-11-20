@@ -5,13 +5,19 @@ import dotenv from "dotenv";
 import { connectDB } from "./config/db";
 import serviceRoutes from "./routes/serviceRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
+import paymentRoutes from "./routes/paymentRoutes";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// CORS configuration
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  }),
+);
 
 // MongoDB connection middleware
 app.use(async (req, res, next) => {
@@ -24,12 +30,20 @@ app.use(async (req, res, next) => {
   }
 });
 
+// Payment routes must come before express.json()
+// so Stripe webhook can receive the raw request body.
+app.use("/payments", paymentRoutes);
+
+// Parse JSON for other routes
+app.use(express.json());
+
 // Services routes
 app.use("/services", serviceRoutes);
 
 // Booking routes
 app.use("/bookings", bookingRoutes);
 
+// Server health check
 app.get("/", (req, res) => {
   res.send("WedPlan Server is running!");
 });
