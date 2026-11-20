@@ -14,6 +14,74 @@ import {
 } from "../utils/collections";
 
 const router = Router();
+// Get the vendor's latest subscription status and payment details
+router.get("/subscription", async (req, res) => {
+  try {
+    const vendor = await verifyVendor(req);
+
+    if (!vendor) {
+      res.status(401).send({
+        success: false,
+        message: "Unauthorized. Please sign in as a vendor.",
+      });
+      return;
+    }
+
+    const userId = vendor.id;
+
+    const userFilter: Filter<Document> = ObjectId.isValid(userId)
+      ? {
+          $or: [
+            { _id: new ObjectId(userId) },
+            { id: userId },
+          ],
+        }
+      : { id: userId };
+
+    const user = await usersCollection().findOne(userFilter);
+
+    if (!user || user.role !== "vendor") {
+      res.status(404).send({
+        success: false,
+        message: "Vendor account not found.",
+      });
+      return;
+    }
+
+    const transaction = await transactionsCollection().findOne(
+      {
+        vendorId: userId,
+        status: "paid",
+      },
+      {
+        sort: { createdAt: -1 },
+      },
+    );
+
+    res.status(200).send({
+      success: true,
+      data: {
+        plan: user.subscriptionPlan === "premium" ? "premium" : "free",
+        transaction: transaction
+          ? {
+              amount: transaction.amount,
+              currency: transaction.currency,
+              status: transaction.status,
+              createdAt: transaction.createdAt,
+              stripeSessionId: transaction.stripeSessionId,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to load vendor subscription:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to load subscription information.",
+    });
+  }
+});
 
 // Create a Stripe Checkout Session
 router.post("/create-checkout-session", async (req, res) => {
@@ -51,8 +119,8 @@ router.post("/create-checkout-session", async (req, res) => {
         userRole: vendor.role,
         priceId,
       },
-      success_url: `${clientUrl}/dashboard/vendor/subscription?payment=success`,
-      cancel_url: `${clientUrl}/dashboard/vendor/subscription?payment=cancelled`,
+       success_url: `${clientUrl}/dashboard/vendor/subscription/success`,
+       cancel_url: `${clientUrl}/dashboard/vendor/subscription/cancel`,
     });
 
     res.status(200).send({
