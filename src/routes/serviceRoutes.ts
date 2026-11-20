@@ -45,6 +45,174 @@ router.post("/upload-image", upload.single("image"), async (req, res) => {
   }
 });
 
+// Update a service
+router.patch("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      vendorId,
+      serviceName,
+      category,
+      description,
+      price,
+      location,
+      images,
+    } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service ID",
+      });
+      return;
+    }
+
+    const allowedCategories = [
+      "Photography & Videography",
+      "Wedding Venues",
+      "Decoration & Florist",
+      "Catering Services",
+      "Makeup & Styling",
+      "Wedding Fashion",
+    ];
+
+    if (
+      !vendorId ||
+      !serviceName ||
+      !category ||
+      !description ||
+      price === undefined ||
+      !location ||
+      !Array.isArray(images) ||
+      images.length === 0
+    ) {
+      res.status(400).send({
+        success: false,
+        message: "Please provide all required service information",
+      });
+      return;
+    }
+
+    if (!allowedCategories.includes(category)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service category",
+      });
+      return;
+    }
+
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+      res.status(400).send({
+        success: false,
+        message: "Price must be a positive number",
+      });
+      return;
+    }
+
+    if (
+      typeof serviceName !== "string" ||
+      typeof description !== "string" ||
+      typeof location !== "string" ||
+      !images.every(
+        (image: unknown) =>
+          typeof image === "string" && image.trim().length > 0,
+      )
+    ) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service information",
+      });
+      return;
+    }
+
+    const result = await servicesCollection().updateOne(
+      {
+        _id: new ObjectId(id),
+        vendorId: vendorId.trim(),
+      },
+      {
+        $set: {
+          serviceName: serviceName.trim(),
+          category,
+          description: description.trim(),
+          price,
+          location: location.trim(),
+          images,
+        },
+      },
+    );
+
+    if (result.matchedCount === 0) {
+      res.status(404).send({
+        success: false,
+        message: "Service not found",
+      });
+      return;
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Service updated successfully",
+    });
+  } catch (error) {
+    console.error("Failed to update service:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to update service",
+    });
+  }
+});
+
+// Delete a service
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid service ID",
+      });
+      return;
+    }
+
+    if (!vendorId || typeof vendorId !== "string") {
+      res.status(400).send({
+        success: false,
+        message: "Vendor ID is required",
+      });
+      return;
+    }
+
+    const result = await servicesCollection().deleteOne({
+      _id: new ObjectId(id),
+      vendorId: vendorId.trim(),
+    });
+
+    if (result.deletedCount === 0) {
+      res.status(404).send({
+        success: false,
+        message: "Service not found",
+      });
+      return;
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Service deleted successfully",
+    });
+  } catch (error) {
+    console.error("Failed to delete service:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete service",
+    });
+  }
+});
+
 // Get a single service by ID
 router.get("/:id", async (req, res) => {
   try {
