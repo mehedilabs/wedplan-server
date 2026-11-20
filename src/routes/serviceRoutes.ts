@@ -239,10 +239,22 @@ router.get("/:id", async (req, res) => {
       return;
     }
 
+    // Get vendor subscription status
+    const vendor = ObjectId.isValid(service.vendorId)
+      ? await usersCollection().findOne({
+          _id: new ObjectId(service.vendorId),
+        })
+      : null;
+
+    const serviceWithPremiumStatus = {
+      ...service,
+      isPremium: vendor?.subscriptionPlan === "premium",
+    };
+
     res.status(200).send({
       success: true,
       message: "Service details fetched successfully",
-      data: service,
+      data: serviceWithPremiumStatus,
     });
   } catch (error) {
     console.error("Failed to fetch service details:", error);
@@ -289,7 +301,6 @@ router.get("/vendor/:vendorId", async (req, res) => {
   }
 });
 
-
 // Get all approved and active services
 router.get("/", async (req, res) => {
   try {
@@ -300,10 +311,40 @@ router.get("/", async (req, res) => {
       })
       .toArray();
 
+    // Collect unique vendor IDs
+    const vendorIds = [
+      ...new Set(
+        services
+          .map((service) => service.vendorId)
+          .filter((id) => ObjectId.isValid(id)),
+      ),
+    ].map((id) => new ObjectId(id));
+
+    // Fetch vendor subscription information
+    const vendors = await usersCollection()
+      .find({
+        _id: { $in: vendorIds },
+      })
+      .project({ subscriptionPlan: 1 })
+      .toArray();
+
+    // Collect Premium vendor IDs
+    const premiumVendorIds = new Set(
+      vendors
+        .filter((vendor) => vendor.subscriptionPlan === "premium")
+        .map((vendor) => vendor._id.toString()),
+    );
+
+    // Add Premium status to each service
+    const servicesWithPremiumStatus = services.map((service) => ({
+      ...service,
+      isPremium: premiumVendorIds.has(service.vendorId),
+    }));
+
     res.status(200).send({
       success: true,
       message: "Services fetched successfully",
-      data: services,
+      data: servicesWithPremiumStatus,
     });
   } catch (error) {
     console.error("Failed to fetch services:", error);
@@ -319,16 +360,16 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
-  vendorId,
-  vendorName,
-  vendorEmail,
-  serviceName,
-  category,
-  description,
-  price,
-  location,
-  images,
-} = req.body;
+      vendorId,
+      vendorName,
+      vendorEmail,
+      serviceName,
+      category,
+      description,
+      price,
+      location,
+      images,
+    } = req.body;
 
     const allowedCategories = [
       "Photography & Videography",
@@ -339,24 +380,25 @@ router.post("/", async (req, res) => {
       "Wedding Fashion",
     ];
 
- if (
-  !vendorId ||
-  !vendorName ||
-  !vendorEmail ||
-  !serviceName ||
-  !category ||
-  !description ||
-  price === undefined ||
-  !location ||
-  !Array.isArray(images) ||
-  images.length === 0
-) {
-  res.status(400).send({
-    success: false,
-    message: "Please provide all required service information",
-  });
-  return;
-}
+    if (
+      !vendorId ||
+      !vendorName ||
+      !vendorEmail ||
+      !serviceName ||
+      !category ||
+      !description ||
+      price === undefined ||
+      !location ||
+      !Array.isArray(images) ||
+      images.length === 0
+    ) {
+      res.status(400).send({
+        success: false,
+        message: "Please provide all required service information",
+      });
+      return;
+    }
+
     if (
       typeof vendorName !== "string" ||
       typeof vendorEmail !== "string" ||
@@ -402,57 +444,58 @@ router.post("/", async (req, res) => {
       return;
     }
 
-// Check vendor subscription and service limit
-if (!ObjectId.isValid(vendorId.trim())) {
-  res.status(400).send({
-    success: false,
-    message: "Invalid vendor ID",
-  });
-  return;
-}
+    // Check vendor subscription and service limit
+    if (!ObjectId.isValid(vendorId.trim())) {
+      res.status(400).send({
+        success: false,
+        message: "Invalid vendor ID",
+      });
+      return;
+    }
 
-const vendor = await usersCollection().findOne({
-  _id: new ObjectId(vendorId.trim()),
-});
-
-if (!vendor) {
-  res.status(404).send({
-    success: false,
-    message: "Vendor account not found",
-  });
-  return;
-}
-
-const subscriptionPlan = vendor.subscriptionPlan ?? "free";
-
-if (subscriptionPlan !== "premium") {
- const vendorServicesCount = await servicesCollection().countDocuments({
-  vendorId: vendorId.trim(),
-});
-
-  if (vendorServicesCount >= 3) {
-    res.status(403).send({
-      success: false,
-      message: "Your Free plan allows up to 3 services. Please delete an existing service to add a new one, or upgrade to Premium for unlimited services.",
+    const vendor = await usersCollection().findOne({
+      _id: new ObjectId(vendorId.trim()),
     });
-    return;
-  }
-}
 
-   const newService = {
-  vendorId: vendorId.trim(),
-  vendorName: vendorName.trim(),
-  vendorEmail: vendorEmail.trim(),
-  serviceName: serviceName.trim(),
-  category,
-  description: description.trim(),
-  price,
-  location: location.trim(),
-  images,
-  status: "pending" as const,
-  isActive: true,
-  createdAt: new Date(),
-};
+    if (!vendor) {
+      res.status(404).send({
+        success: false,
+        message: "Vendor account not found",
+      });
+      return;
+    }
+
+    const subscriptionPlan = vendor.subscriptionPlan ?? "free";
+
+    if (subscriptionPlan !== "premium") {
+      const vendorServicesCount = await servicesCollection().countDocuments({
+        vendorId: vendorId.trim(),
+      });
+
+      if (vendorServicesCount >= 3) {
+        res.status(403).send({
+          success: false,
+          message:
+            "Your Free plan allows up to 3 services. Please delete an existing service to add a new one, or upgrade to Premium for unlimited services.",
+        });
+        return;
+      }
+    }
+
+    const newService = {
+      vendorId: vendorId.trim(),
+      vendorName: vendorName.trim(),
+      vendorEmail: vendorEmail.trim(),
+      serviceName: serviceName.trim(),
+      category,
+      description: description.trim(),
+      price,
+      location: location.trim(),
+      images,
+      status: "pending" as const,
+      isActive: true,
+      createdAt: new Date(),
+    };
 
     const result = await servicesCollection().insertOne(newService);
 
