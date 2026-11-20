@@ -10,3 +10,7 @@ export const servicesCollection = () => {
 export const bookingsCollection = () => {
   return db.collection<Booking>("bookings");
 };
+
+export const usersCollection = () => {
+  return db.collection("user");
+};

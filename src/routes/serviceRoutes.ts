@@ -1,6 +1,6 @@
 
 import { Router } from "express";
-import { servicesCollection } from "../utils/collections";
+import { servicesCollection, usersCollection } from "../utils/collections";
 import { ObjectId } from "mongodb";
 
 const router = Router();
@@ -401,6 +401,43 @@ router.post("/", async (req, res) => {
       });
       return;
     }
+
+// Check vendor subscription and service limit
+if (!ObjectId.isValid(vendorId.trim())) {
+  res.status(400).send({
+    success: false,
+    message: "Invalid vendor ID",
+  });
+  return;
+}
+
+const vendor = await usersCollection().findOne({
+  _id: new ObjectId(vendorId.trim()),
+});
+
+if (!vendor) {
+  res.status(404).send({
+    success: false,
+    message: "Vendor account not found",
+  });
+  return;
+}
+
+const subscriptionPlan = vendor.subscriptionPlan ?? "free";
+
+if (subscriptionPlan !== "premium") {
+ const vendorServicesCount = await servicesCollection().countDocuments({
+  vendorId: vendorId.trim(),
+});
+
+  if (vendorServicesCount >= 3) {
+    res.status(403).send({
+      success: false,
+      message: "Your Free plan allows up to 3 services. Please delete an existing service to add a new one, or upgrade to Premium for unlimited services.",
+    });
+    return;
+  }
+}
 
    const newService = {
   vendorId: vendorId.trim(),
