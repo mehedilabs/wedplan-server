@@ -6,6 +6,7 @@ import { connectDB } from "./config/db";
 import serviceRoutes from "./routes/serviceRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 dotenv.config();
 
@@ -42,6 +43,8 @@ app.use("/services", serviceRoutes);
 
 // Booking routes
 app.use("/bookings", bookingRoutes);
+
+app.use("/admin", adminRoutes);
 
 // Server health check
 app.get("/", (req, res) => {
