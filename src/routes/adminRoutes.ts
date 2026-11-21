@@ -5,8 +5,8 @@ import { db } from "../config/db";
 import {
   servicesCollection,
   usersCollection,
+  transactionsCollection,
 } from "../utils/collections";
-
 const router = express.Router();
 
 // Validate and convert MongoDB ID
@@ -463,6 +463,70 @@ router.delete("/services/:id", async (req, res) => {
 
     res.status(500).json({
       message: "Failed to delete service",
+    });
+  }
+});
+
+
+// ADMIN TRANSACTION MANAGEMENT
+
+// Get all transactions with vendor information
+router.get("/transactions", async (req, res) => {
+  try {
+    const transactions = await transactionsCollection()
+      .aggregate([
+        {
+          $sort: { createdAt: -1 },
+        },
+        {
+          $lookup: {
+            from: "user",
+            let: { vendorId: "$vendorId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $or: [
+                      {
+                        $eq: [
+                          { $toString: "$_id" },
+                          "$$vendorId",
+                        ],
+                      },
+                      {
+                        $eq: ["$id", "$$vendorId"],
+                      },
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  email: 1,
+                  image: 1,
+                  businessName: 1,
+                },
+              },
+            ],
+            as: "vendor",
+          },
+        },
+        {
+          $unwind: {
+            path: "$vendor",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json(transactions);
+  } catch (error) {
+    console.error("Failed to fetch transactions:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch transactions",
     });
   }
 });
