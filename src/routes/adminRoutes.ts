@@ -18,6 +18,57 @@ const getObjectId = (id: string) => {
   return new ObjectId(id);
 };
 
+
+// ADMIN DASHBOARD OVERVIEW
+
+// Get admin dashboard statistics
+router.get("/overview", async (req, res) => {
+  try {
+    const [
+      totalUsers,
+      totalVendors,
+      totalCustomers,
+      totalServices,
+      pendingServices,
+      totalTransactions,
+    ] = await Promise.all([
+      usersCollection().countDocuments({}),
+
+      usersCollection().countDocuments({
+        role: "vendor",
+      }),
+
+      usersCollection().countDocuments({
+        role: "customer",
+      }),
+
+      servicesCollection().countDocuments({}),
+
+      servicesCollection().countDocuments({
+        status: "pending",
+      }),
+
+      transactionsCollection().countDocuments({}),
+    ]);
+
+    res.status(200).json({
+      totalUsers,
+      totalVendors,
+      totalCustomers,
+      totalServices,
+      pendingServices,
+      totalTransactions,
+    });
+  } catch (error) {
+    console.error("Failed to fetch admin overview:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch admin overview",
+    });
+  }
+});
+
+
 // ==============================
 // ADMIN USER MANAGEMENT
 // ==============================
