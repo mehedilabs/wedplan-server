@@ -2,7 +2,10 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import { db } from "../config/db";
-import { usersCollection } from "../utils/collections";
+import {
+  servicesCollection,
+  usersCollection,
+} from "../utils/collections";
 
 const router = express.Router();
 
@@ -14,6 +17,10 @@ const getObjectId = (id: string) => {
 
   return new ObjectId(id);
 };
+
+// ==============================
+// ADMIN USER MANAGEMENT
+// ==============================
 
 // Get all users
 router.get("/users", async (req, res) => {
@@ -301,6 +308,161 @@ router.delete("/users/:id", async (req, res) => {
 
     res.status(500).json({
       message: "Failed to delete user",
+    });
+  }
+});
+
+
+// ADMIN SERVICE MANAGEMENT
+
+
+// Get all services
+router.get("/services", async (req, res) => {
+  try {
+    const services = await servicesCollection()
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json(services);
+  } catch (error) {
+    console.error("Failed to fetch services:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch services",
+    });
+  }
+});
+
+// Approve or reject a service
+router.patch("/services/:id/status", async (req, res) => {
+  try {
+    const serviceId = getObjectId(req.params.id);
+    const { status } = req.body;
+
+    if (!serviceId) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    const allowedStatuses = ["approved", "rejected"];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        message: "Invalid service status",
+      });
+    }
+
+    const service = await servicesCollection().findOne({
+      _id: serviceId,
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        message: "Service not found",
+      });
+    }
+
+    await servicesCollection().updateOne(
+      { _id: serviceId },
+      {
+        $set: {
+          status,
+        },
+      },
+    );
+
+    res.status(200).json({
+      message: `Service ${status} successfully`,
+    });
+  } catch (error) {
+    console.error("Failed to update service status:", error);
+
+    res.status(500).json({
+      message: "Failed to update service status",
+    });
+  }
+});
+
+// Activate or deactivate a service
+router.patch("/services/:id/active", async (req, res) => {
+  try {
+    const serviceId = getObjectId(req.params.id);
+    const { isActive } = req.body;
+
+    if (!serviceId) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({
+        message: "isActive must be a boolean",
+      });
+    }
+
+    const service = await servicesCollection().findOne({
+      _id: serviceId,
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        message: "Service not found",
+      });
+    }
+
+    await servicesCollection().updateOne(
+      { _id: serviceId },
+      {
+        $set: {
+          isActive,
+        },
+      },
+    );
+
+    res.status(200).json({
+      message: `Service ${isActive ? "activated" : "deactivated"} successfully`,
+    });
+  } catch (error) {
+    console.error("Failed to update service status:", error);
+
+    res.status(500).json({
+      message: "Failed to update service status",
+    });
+  }
+});
+
+// Delete a service
+router.delete("/services/:id", async (req, res) => {
+  try {
+    const serviceId = getObjectId(req.params.id);
+
+    if (!serviceId) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    const result = await servicesCollection().deleteOne({
+      _id: serviceId,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        message: "Service not found",
+      });
+    }
+
+    res.status(200).json({
+      message: "Service deleted successfully",
+    });
+  } catch (error) {
+    console.error("Failed to delete service:", error);
+
+    res.status(500).json({
+      message: "Failed to delete service",
     });
   }
 });
