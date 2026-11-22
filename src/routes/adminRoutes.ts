@@ -7,7 +7,12 @@ import {
   usersCollection,
   transactionsCollection,
 } from "../utils/collections";
+import { verifyAuth, requireRole } from "../middlewares/auth";
+
 const router = express.Router();
+
+// Enforce Admin authentication and active status on all admin routes
+router.use(verifyAuth, requireRole("admin"));
 
 // Validate and convert MongoDB ID
 const getObjectId = (id: string) => {

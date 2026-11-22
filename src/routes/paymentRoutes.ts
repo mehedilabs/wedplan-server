@@ -1,4 +1,3 @@
-
 import express, { Router } from "express";
 import Stripe from "stripe";
 import {
@@ -7,27 +6,18 @@ import {
   type Document,
 } from "mongodb";
 import { getStripe } from "../config/stripe";
-import { verifyVendor } from "../utils/verifyVendor";
+import { verifyAuth, requireRole } from "../middlewares/auth";
 import {
   usersCollection,
   transactionsCollection,
 } from "../utils/collections";
 
 const router = Router();
+
 // Get the vendor's latest subscription status and payment details
-router.get("/subscription", async (req, res) => {
+router.get("/subscription", verifyAuth, requireRole("vendor"), async (req, res) => {
   try {
-    const vendor = await verifyVendor(req);
-
-    if (!vendor) {
-      res.status(401).send({
-        success: false,
-        message: "Unauthorized. Please sign in as a vendor.",
-      });
-      return;
-    }
-
-    const userId = vendor.id;
+    const userId = req.user!._id.toString();
 
     const userFilter: Filter<Document> = ObjectId.isValid(userId)
       ? {
@@ -83,18 +73,11 @@ router.get("/subscription", async (req, res) => {
   }
 });
 
-// Create a Stripe Checkout Session
-router.post("/create-checkout-session", async (req, res) => {
+// Create a Stripe Checkout Session (vendor only)
+router.post("/create-checkout-session", verifyAuth, requireRole("vendor"), async (req, res) => {
   try {
-    const vendor = await verifyVendor(req);
-
-    if (!vendor) {
-      res.status(401).send({
-        success: false,
-        message: "Unauthorized. Please sign in as a vendor.",
-      });
-      return;
-    }
+    const vendor = req.user!;
+    const userId = vendor._id.toString();
 
     const priceId = process.env.STRIPE_PREMIUM_PRICE_ID;
 
@@ -112,15 +95,15 @@ router.post("/create-checkout-session", async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
-      client_reference_id: vendor.id,
+      client_reference_id: userId,
       customer_email: vendor.email,
       metadata: {
-        userId: vendor.id,
+        userId,
         userRole: vendor.role,
         priceId,
       },
-       success_url: `${clientUrl}/dashboard/vendor/subscription/success`,
-       cancel_url: `${clientUrl}/dashboard/vendor/subscription/cancel`,
+      success_url: `${clientUrl}/dashboard/vendor/subscription/success`,
+      cancel_url: `${clientUrl}/dashboard/vendor/subscription/cancel`,
     });
 
     res.status(200).send({
@@ -171,25 +154,44 @@ router.post(
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        const userId = session.metadata?.userId;
+        const userId = session.metadata?.userId || session.client_reference_id;
         const userRole = session.metadata?.userRole;
         const priceId = session.metadata?.priceId;
 
-        // Validate successful payment
+        // Validate basic parameters
         if (
           session.payment_status !== "paid" ||
           session.mode !== "payment" ||
           userRole !== "vendor" ||
           !userId ||
-          session.client_reference_id !== userId ||
-          priceId !== process.env.STRIPE_PREMIUM_PRICE_ID
+          priceId !== process.env.STRIPE_PREMIUM_PRICE_ID ||
+          !session.amount_total ||
+          session.amount_total <= 0
         ) {
-          console.log("Ignoring an invalid or unpaid Checkout Session");
+          console.log("Ignoring invalid or unpaid Checkout Session");
           res.status(200).send({ received: true });
           return;
         }
 
-        // Find vendor in MongoDB
+        // Expand session line items directly from Stripe to verify purchased price ID
+        const stripe = getStripe();
+        const expandedSession = await stripe.checkout.sessions.retrieve(
+          session.id,
+          { expand: ["line_items"] },
+        );
+
+        const purchasedPriceId =
+          expandedSession.line_items?.data?.[0]?.price?.id;
+        if (purchasedPriceId !== process.env.STRIPE_PREMIUM_PRICE_ID) {
+          console.error("Premium activation rejected: line item price mismatch", {
+            purchasedPriceId,
+            expected: process.env.STRIPE_PREMIUM_PRICE_ID,
+          });
+          res.status(200).send({ received: true });
+          return;
+        }
+
+        // Verify the actual current database user is an active Vendor
         const userFilter: Filter<Document> = ObjectId.isValid(userId)
           ? {
               $or: [
@@ -199,27 +201,31 @@ router.post(
             }
           : { id: userId };
 
+        const dbUser = await usersCollection().findOne(userFilter);
+
+        if (!dbUser || dbUser.role !== "vendor") {
+          console.error("Premium activation rejected: user is not a vendor in DB", userId);
+          res.status(200).send({ received: true });
+          return;
+        }
+
+        if (dbUser.status === "blocked" || dbUser.status === "inactive") {
+          console.error("Premium activation rejected: user account is blocked or inactive", userId);
+          res.status(200).send({ received: true });
+          return;
+        }
+
         // Activate lifetime Premium
-        const result = await usersCollection().updateOne(userFilter, {
+        await usersCollection().updateOne(userFilter, {
           $set: {
             subscriptionPlan: "premium",
             subscriptionExpiresAt: null,
           },
         });
 
-        if (result.matchedCount === 0) {
-          console.error(
-            "Premium activation failed: Vendor not found",
-            userId,
-          );
-
-          res.status(500).send("Vendor not found");
-          return;
-        }
-
         console.log("Vendor Premium activated successfully:", userId);
 
-        // Save transaction without creating duplicates
+        // Save transaction without creating duplicates (idempotent upsert)
         const transaction = {
           vendorId: userId,
           plan: "premium" as const,

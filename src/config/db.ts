@@ -26,6 +26,15 @@ const connectDB = async (): Promise<void> => {
   db = client.db(dbName);
   isConnected = true;
 
+  // Ensure unique index on transactions collection for stripeSessionId
+  try {
+    await db
+      .collection("transactions")
+      .createIndex({ stripeSessionId: 1 }, { unique: true, sparse: true });
+  } catch (indexError) {
+    console.error("Transactions stripeSessionId index check:", indexError);
+  }
+
   console.log("MongoDB connected successfully!");
 };
 
