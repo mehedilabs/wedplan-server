@@ -234,7 +234,8 @@ router.patch(
   },
 );
 
-// Toggle service availability / active status (vendor owner only, only for approved services)
+
+// Toggle service active status (vendor owner only, pending and approved services)
 router.patch(
   "/:id/availability",
   verifyAuth,
@@ -276,15 +277,17 @@ router.patch(
       if (existingService.vendorId !== authenticatedVendorId) {
         res.status(403).send({
           success: false,
-          message: "Forbidden. You can only manage availability of your own services.",
+          message:
+            "Forbidden. You can only manage availability of your own services.",
         });
         return;
       }
 
-      if (existingService.status !== "approved") {
+      // Rejected services cannot have their active status changed
+      if (existingService.status === "rejected") {
         res.status(400).send({
           success: false,
-          message: "Only approved services can have their availability managed",
+          message: "Rejected services cannot be activated or deactivated.",
         });
         return;
       }
@@ -304,7 +307,7 @@ router.patch(
 
       res.status(200).send({
         success: true,
-        message: `Service marked as ${isActive ? "available" : "unavailable"} successfully`,
+        message: `Service marked as ${isActive ? "active" : "inactive"} successfully`,
         data: {
           serviceId: id,
           isActive,
@@ -320,6 +323,7 @@ router.patch(
     }
   },
 );
+
 
 // Delete a service (vendor owner only)
 router.delete(
