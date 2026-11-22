@@ -322,6 +322,12 @@ router.delete("/users/:id", async (req, res) => {
         message: "User not found",
       });
     }
+    // Prevent admins from deleting their own account
+if (req.user && req.user.id === userId.toHexString()) {
+  return res.status(403).json({
+    message: "You cannot delete your own admin account",
+  });
+}
 
     // Prevent deleting the last admin
     if (user.role === "admin") {
