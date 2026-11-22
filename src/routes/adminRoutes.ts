@@ -322,6 +322,7 @@ router.delete("/users/:id", async (req, res) => {
         message: "User not found",
       });
     }
+    
     // Prevent admins from deleting their own account
 if (req.user && req.user.id === userId.toHexString()) {
   return res.status(403).json({
@@ -343,14 +344,18 @@ if (req.user && req.user.id === userId.toHexString()) {
       }
     }
 
-    // Remove associated sessions and account records
-    await db.collection("session").deleteMany({
-      userId: userId.toHexString(),
-    });
+ // Match userId stored as either string or ObjectId
+const userIdValues = [userId.toHexString(), userId];
 
-    await db.collection("account").deleteMany({
-      userId: userId.toHexString(),
-    });
+// Delete associated sessions
+await db.collection("session").deleteMany({
+  userId: { $in: userIdValues },
+});
+
+// Delete all associated accounts
+await db.collection("account").deleteMany({
+  userId: { $in: userIdValues },
+});
 
     const result = await usersCollection().deleteOne({
       _id: userId,
