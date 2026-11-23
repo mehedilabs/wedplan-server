@@ -490,9 +490,10 @@ router.get("/:id", optionalAuth, async (req, res) => {
       : null;
 
     const serviceWithPremiumStatus = {
-      ...service,
-      isPremium: vendor?.subscriptionPlan === "premium",
-    };
+         ...service,
+         isPremium: vendor?.subscriptionPlan === "premium",
+         vendorImage: vendor?.image ?? null,
+     };
 
     res.status(200).send({
       success: true,
@@ -533,7 +534,7 @@ router.get("/", async (req, res) => {
       .find({
         _id: { $in: vendorIds },
       })
-      .project({ subscriptionPlan: 1 })
+      .project({ subscriptionPlan: 1, image: 1 })
       .toArray();
 
     // Collect Premium vendor IDs
@@ -543,11 +544,18 @@ router.get("/", async (req, res) => {
         .map((vendor) => vendor._id.toString()),
     );
 
-    // Add Premium status to each service
-    const servicesWithPremiumStatus = services.map((service) => ({
-      ...service,
-      isPremium: premiumVendorIds.has(service.vendorId),
-    }));
+    // Add Premium status and vendor profile image to each service
+const servicesWithPremiumStatus = services.map((service) => {
+  const vendor = vendors.find(
+    (vendor) => vendor._id.toString() === service.vendorId,
+  );
+
+  return {
+    ...service,
+    isPremium: premiumVendorIds.has(service.vendorId),
+    vendorImage: vendor?.image ?? null,
+  };
+});
 
     res.status(200).send({
       success: true,
